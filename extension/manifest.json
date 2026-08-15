@@ -1,0 +1,58 @@
+{
+  "manifest_version": "0.3",
+  "name": "indexa-capital-mcp",
+  "display_name": "Indexa Capital",
+  "version": "1.0.0",
+  "description": "Read-only access to your Indexa Capital investment accounts: user data, account details, portfolio and performance",
+  "long_description": "A local MCP server written in Go, with no external dependencies, exposing four read-only tools against api.indexacapital.com.\n\nThe Indexa Capital API token is not itself read-only — the same credential authorises contributions and withdrawals. This server is the cage that makes it read-only: a closed whitelist of four fixed GET paths, no passthrough of paths or free-form parameters, and every tool declared read-only so a client can act on the guarantee instead of reading it in prose.\n\nThe token lives in the macOS Keychain and never leaves this Mac — not in files, not in logs, not in a response.\n\nNot affiliated with, endorsed by, or connected to Indexa Capital.",
+  "author": {
+    "name": "eneko-codes",
+    "url": "https://github.com/eneko-codes"
+  },
+  "homepage": "https://github.com/eneko-codes/indexa-capital-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eneko-codes/indexa-capital-mcp"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "indexa capital",
+    "investment",
+    "portfolio",
+    "finance"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/indexa-capital-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/indexa-capital-mcp",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "indexa_capital_user",
+      "description": "Authenticated user's data and the list of their accounts (codes)"
+    },
+    {
+      "name": "indexa_capital_account",
+      "description": "Basic information for an account (status, risk profile)"
+    },
+    {
+      "name": "indexa_capital_portfolio",
+      "description": "Current portfolio: positions and valuation"
+    },
+    {
+      "name": "indexa_capital_performance",
+      "description": "Account performance and evolution"
+    }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin"
+    ]
+  }
+}
