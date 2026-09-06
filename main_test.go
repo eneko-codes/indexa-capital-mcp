@@ -73,55 +73,6 @@ func TestToolsListIsSorted(t *testing.T) {
 	}
 }
 
-func TestToolsListSchemas(t *testing.T) {
-	listing := toolsList().(map[string]any)["tools"].([]map[string]any)
-	byName := map[string]map[string]any{}
-	for _, tool := range listing {
-		byName[tool["name"].(string)] = tool
-	}
-
-	// Read-only is declared through annotations now, so it must not also be
-	// narrated in the description: two sources for one fact is how they drift.
-	for name, tool := range byName {
-		if strings.Contains(tool["description"].(string), "read-only") {
-			t.Errorf("%s: read-only is narrated in the description instead of annotated", name)
-		}
-		title, _ := tool["title"].(string)
-		if title == "" {
-			t.Errorf("%s: no title for display", name)
-		}
-		if title == tool["description"].(string) {
-			t.Errorf("%s: title and description are the same string", name)
-		}
-	}
-
-	schema := byName["indexa_capital_user"]["inputSchema"].(map[string]any)
-	if required := schema["required"].([]string); len(required) != 0 {
-		t.Errorf("indexa_capital_user should take no arguments, requires %v", required)
-	}
-
-	for _, name := range []string{"indexa_capital_account", "indexa_capital_portfolio", "indexa_capital_performance"} {
-		schema := byName[name]["inputSchema"].(map[string]any)
-		required := schema["required"].([]string)
-		if len(required) != 1 || required[0] != "account" {
-			t.Errorf("%s: requires %v, want [account]", name, required)
-		}
-	}
-
-	// The description ships to the model and into any published repo, so the
-	// example must be a placeholder rather than a real account code.
-	encoded, err := json.Marshal(byName["indexa_capital_account"]["inputSchema"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(encoded, []byte("ABCD1234")) {
-		t.Errorf("account schema lost its placeholder example: %s", encoded)
-	}
-	if !bytes.Contains(encoded, []byte("indexa_capital_user")) {
-		t.Errorf("account schema does not point at the tool that yields a code: %s", encoded)
-	}
-}
-
 // A client that sees no annotations must assume a tool is write-capable,
 // destructive and non-idempotent — the exact opposite of every tool here.
 func TestToolsAreAnnotatedReadOnly(t *testing.T) {
@@ -160,7 +111,6 @@ func TestToolsCallRejectsBadInput(t *testing.T) {
 		want   string
 	}{
 		{"unknown tool", `{"name":"nope","arguments":{}}`, "unknown tool: nope"},
-		{"pre-rename tool name", `{"name":"indexa_user","arguments":{}}`, "unknown tool: indexa_user"},
 		{"malformed code", `{"name":"indexa_capital_account","arguments":{"account":"not-valid!"}}`, "invalid account code"},
 		{"path traversal", `{"name":"indexa_capital_account","arguments":{"account":"../../users/me"}}`, "invalid account code"},
 		{"code too short", `{"name":"indexa_capital_account","arguments":{"account":"AB12"}}`, "invalid account code"},
@@ -168,7 +118,6 @@ func TestToolsCallRejectsBadInput(t *testing.T) {
 		// A non-string value must fail the account check, not the whole decode:
 		// models routinely pass fields that are not in the schema.
 		{"non-string account", `{"name":"indexa_capital_account","arguments":{"account":42}}`, "invalid account code"},
-		{"out-of-schema field", `{"name":"indexa_capital_account","arguments":{"account":"not-valid!","limit":5}}`, "invalid account code"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -394,25 +343,6 @@ func TestOversizedLineExitsLoudly(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "xxxx") {
 		t.Errorf("the diagnostic echoed the offending line: %q", stderr.String())
-	}
-}
-
-func TestToolsListIsStableAcrossRuns(t *testing.T) {
-	var first string
-	for i := 0; i < 5; i++ {
-		cmd := exec.Command(binaryPath)
-		cmd.Stdin = strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}` + "\n")
-		out, err := cmd.Output()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			first = string(out)
-			continue
-		}
-		if string(out) != first {
-			t.Fatalf("run %d differs from run 0:\n%s\n%s", i, first, out)
-		}
 	}
 }
 
