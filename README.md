@@ -16,6 +16,24 @@ Not affiliated with, endorsed by, or connected to Indexa Capital.
 - Go 1.21 or later, only to build from source (`brew install go` if you don't have it)
 - An Indexa Capital account and API token
 
+## API
+
+No Apple framework and no third-party module — Go's standard library only: `net/http`,
+`encoding/json`, `os/exec`, `regexp`, `bufio`.
+
+| Endpoint | Tool |
+|---|---|
+| `GET /users/me` | `indexa_capital_user` |
+| `GET /accounts/{code}` | `indexa_capital_account` |
+| `GET /accounts/{code}/portfolio` | `indexa_capital_portfolio` |
+| `GET /accounts/{code}/performance` | `indexa_capital_performance` |
+
+Base URL `https://api.indexacapital.com`. The path table is closed: the method is always
+`GET`, account codes must match `^[A-Z0-9]{6,10}$` before interpolation, redirects are
+refused, and a response is capped at 1 MiB. The token comes from the macOS Keychain by
+running `security find-generic-password` — see [Keychain Services](https://developer.apple.com/documentation/security/keychain-services)
+— rather than through the Keychain C API, because one subprocess is smaller and auditable.
+
 ## Install
 
 **1. Regenerate your token** at indexacapital.com → settings → API (the previous one
