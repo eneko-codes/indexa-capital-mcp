@@ -16,6 +16,17 @@ Read-only server — no tool can create, modify or delete anything. Only GET req
 
 A local MCP server (Go, stdio transport) exposing four read-only tools over the Indexa Capital REST API. One file, standard library only, no `go.mod`. The API token is read from the macOS Keychain at call time.
 
+## API
+
+No Apple framework and no third-party module: Go's standard library only — `net/http`, `encoding/json`, `os/exec`, `regexp`, `bufio`. The token is read from the Keychain by running `security find-generic-password`; see [Keychain Services](https://developer.apple.com/documentation/security/keychain-services) for what that store is.
+
+Four fixed paths on `https://api.indexacapital.com`, always `GET`: `/users/me`, `/accounts/{code}`, `/accounts/{code}/portfolio`, `/accounts/{code}/performance`. Account codes are validated against `^[A-Z0-9]{6,10}$` before interpolation, redirects are refused, and the response is capped at 1 MiB.
+
+## Surface not used
+
+- Any non-GET method, any caller-supplied path, any passthrough tool. The path table is closed by design; do not open it.
+- The Keychain Services C API — one `security` subprocess is smaller and auditable.
+
 ## Commands
 
 ```bash
