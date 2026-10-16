@@ -210,9 +210,15 @@ func toolsList() any {
 // from a stdio server. stdout is the JSON-RPC stream, so nothing here may touch it.
 // Callers pass fixed words only: never a request argument, an account code, an API
 // response or an error's text, which can carry any of them.
+//
+// The process id is on every line because the host appends every instance of this
+// server (one per client session) to the same file, and a line must say which one.
 func logLine(level, event string) {
-	fmt.Fprintf(os.Stderr, "%s %s indexa-capital-mcp %s\n",
-		time.Now().UTC().Format(time.RFC3339), level, event)
+	fmt.Fprint(os.Stderr, formatLogLine(time.Now(), level, event, os.Getpid()))
+}
+
+func formatLogLine(at time.Time, level, event string, pid int) string {
+	return fmt.Sprintf("%s %s indexa-capital-mcp[%d] %s\n", at.UTC().Format(time.RFC3339), level, pid, event)
 }
 
 // toolNameForLog echoes a client-chosen name only when it looks like one of our own

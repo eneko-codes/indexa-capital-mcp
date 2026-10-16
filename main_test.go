@@ -424,3 +424,15 @@ func TestToolNameForLog(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatLogLineNamesTheProcess(t *testing.T) {
+	at := time.Date(2026, 10, 17, 1, 2, 3, 0, time.UTC)
+	first := formatLogLine(at, "info", "stopped", 4242)
+	second := formatLogLine(at, "info", "stopped", 4243)
+	if first != "2026-10-17T01:02:03Z info indexa-capital-mcp[4242] stopped\n" {
+		t.Errorf("unexpected line %q", first)
+	}
+	if first == second {
+		t.Error("two processes produced identical lines")
+	}
+}
