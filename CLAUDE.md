@@ -49,3 +49,8 @@ go test main.go main_test.go -live    # calls the real API with the owner's real
 **Apple silicon only, deliberately.** `scripts/pack.sh` builds for arm64 alone (`GOARCH=arm64`, no `lipo`) and fails if the binary
 holds any other architecture. A universal build doubles the bundle for an architecture
 macOS 26 is the last release to support. Do not add an x86_64 slice back.
+
+
+## Diagnostics
+
+Logs go to stderr through `logLine`, which the host captures (Claude Desktop writes it to `~/Library/Logs/Claude/mcp-server-<name>.log`). stdout is the JSON-RPC stream: never print to it. Pass `logLine` fixed words only. Do not log an argument, an account code, an API response or an error's text; log the event, the tool name, a fixed failure word and a duration.

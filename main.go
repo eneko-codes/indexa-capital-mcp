@@ -206,7 +206,43 @@ func toolsList() any {
 	return map[string]any{"tools": list}
 }
 
+// logLine writes one diagnostic line to stderr, the only channel an MCP host captures
+// from a stdio server. stdout is the JSON-RPC stream, so nothing here may touch it.
+// Callers pass fixed words only: never a request argument, an account code, an API
+// response or an error's text, which can carry any of them.
+func logLine(level, event string) {
+	fmt.Fprintf(os.Stderr, "%s %s indexa-capital-mcp %s\n",
+		time.Now().UTC().Format(time.RFC3339), level, event)
+}
+
+// toolNameForLog echoes a client-chosen name only when it looks like one of our own
+// snake_case names; anything else, including a newline that would forge a second log
+// line, becomes "invalid".
+func toolNameForLog(raw string) string {
+	if raw == "" || len(raw) > 64 {
+		return "invalid"
+	}
+	for _, r := range raw {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
+			return "invalid"
+		}
+	}
+	return raw
+}
+
 func toolsCall(params json.RawMessage) (any, *rpcError) {
+	started := time.Now()
+	name, failure := "", ""
+	defer func() {
+		event := fmt.Sprintf("tool=%s outcome=ok ms=%d", toolNameForLog(name), time.Since(started).Milliseconds())
+		level := "info"
+		if failure != "" {
+			level = "error"
+			event = fmt.Sprintf("tool=%s outcome=failed error=%s ms=%d",
+				toolNameForLog(name), failure, time.Since(started).Milliseconds())
+		}
+		logLine(level, event)
+	}()
 	var p struct {
 		Name string `json:"name"`
 		// any, not string: models routinely add fields outside the schema, and one
@@ -214,10 +250,13 @@ func toolsCall(params json.RawMessage) (any, *rpcError) {
 		Arguments map[string]any `json:"arguments"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
+		failure = "invalid_parameters"
 		return nil, &rpcError{-32602, "invalid parameters"}
 	}
+	name = p.Name
 	t, ok := tools[p.Name]
 	if !ok {
+		failure = "unknown_tool"
 		return nil, &rpcError{-32602, "unknown tool: " + p.Name}
 	}
 	path := t.Path
@@ -225,12 +264,14 @@ func toolsCall(params json.RawMessage) (any, *rpcError) {
 		account, _ := p.Arguments["account"].(string) // non-string fails the regex below
 		code := strings.ToUpper(strings.TrimSpace(account))
 		if !accountRe.MatchString(code) {
+			failure = "invalid_account"
 			return nil, &rpcError{-32602, "invalid account code"}
 		}
 		path = fmt.Sprintf(t.Path, code)
 	}
 	body, err := fetch(path)
 	if err != nil {
+		failure = "fetch_failed"
 		return map[string]any{
 			"content": []map[string]any{{"type": "text", "text": "Error: " + err.Error()}},
 			"isError": true,
@@ -246,6 +287,7 @@ func main() {
 	in.Buffer(make([]byte, 0, maxPayloadBytes), maxPayloadBytes)
 	out := os.Stdout
 
+	logLine("info", "started version=1.0.0")
 	for in.Scan() {
 		line := strings.TrimSpace(in.Text())
 		if line == "" {
@@ -280,6 +322,7 @@ func main() {
 			reply(out, req.ID, nil, &rpcError{-32601, "unsupported method: " + req.Method})
 		}
 	}
+	logLine("info", "stopped")
 	// Scan() also returns false on error — an oversized line, a failed read. Exiting
 	// 0 there is indistinguishable from a clean shutdown, which is how the server
 	// disappears mid-session with nothing to diagnose. Scanner faults carry no

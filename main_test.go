@@ -411,3 +411,16 @@ func toolNames(t *testing.T, listing any) []string {
 	}
 	return names
 }
+
+func TestToolNameForLog(t *testing.T) {
+	for raw, want := range map[string]string{
+		"indexa_capital_account": "indexa_capital_account",
+		"evil\nfatal forged":     "invalid",
+		"":                       "invalid",
+		strings.Repeat("a", 65):  "invalid",
+	} {
+		if got := toolNameForLog(raw); got != want {
+			t.Errorf("toolNameForLog(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
