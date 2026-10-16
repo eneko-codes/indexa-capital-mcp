@@ -36,10 +36,16 @@ gofmt -l -w main.go
 ```
 
 ```bash
-./scripts/pack.sh   # builds the universal binary and packs dist/indexa-capital-mcp.mcpb
+./scripts/pack.sh   # builds the arm64 binary and packs dist/indexa-capital-mcp.mcpb
 ```
 
 ```bash
 go test main.go main_test.go          # no network, no Keychain
 go test main.go main_test.go -live    # calls the real API with the owner's real accounts
 ```
+
+## Architecture
+
+**Apple silicon only, deliberately.** `scripts/pack.sh` builds for arm64 alone (`GOARCH=arm64`, no `lipo`) and fails if the binary
+holds any other architecture. A universal build doubles the bundle for an architecture
+macOS 26 is the last release to support. Do not add an x86_64 slice back.

@@ -9,16 +9,18 @@ NAME="indexa-capital-mcp"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Universal, so the bundle also runs on an Intel Mac. Go has no single-invocation
-# universal build the way `swift build --arch X --arch Y` does, so each architecture
-# is built separately and joined with lipo. The module-less build (no go.mod) needs
-# the source file named explicitly, same as `go build main.go` in the README.
-echo "==> Building $NAME (universal)"
+# Apple silicon only. Go builds for one target per invocation, so no lipo step.
+# The module-less build (no go.mod) needs the source file named explicitly, same as
+# `go build main.go` in the README.
+echo "==> Building $NAME (arm64)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-GOOS=darwin GOARCH=arm64 go build -o "$WORK/$NAME-arm64" main.go
-GOOS=darwin GOARCH=amd64 go build -o "$WORK/$NAME-amd64" main.go
-lipo -create -output "$WORK/$NAME" "$WORK/$NAME-arm64" "$WORK/$NAME-amd64"
+GOOS=darwin GOARCH=arm64 go build -o "$WORK/$NAME" main.go
+# GUARD: Apple silicon only. A stray extra architecture would otherwise ship without
+# any error.
+ARCHS="$(lipo -archs "$WORK/$NAME")"
+[ "$ARCHS" = "arm64" ] \
+  || { echo "!! expected arm64 only, got: $ARCHS" >&2; exit 1; }
 
 echo "==> Staging bundle"
 STAGE="$ROOT/extension"

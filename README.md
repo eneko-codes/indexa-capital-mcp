@@ -12,7 +12,7 @@ Not affiliated with, endorsed by, or connected to Indexa Capital.
 
 ## Requirements
 
-- macOS (Apple Silicon or Intel)
+- macOS on Apple silicon
 - Go 1.21 or later, only to build from source (`brew install go` if you don't have it)
 - An Indexa Capital account and API token
 
@@ -54,7 +54,7 @@ security add-generic-password -s indexa-capital-api -a "$USER" -U -w
 ./scripts/pack.sh
 ```
 
-That builds a universal (arm64 + Intel) binary, ad-hoc signs it — required just to run
+That builds an arm64 binary, ad-hoc signs it — required just to run
 at all on Apple Silicon, since an unsigned binary is killed by Gatekeeper outright, not a
 TCC or permissions step, as there is no framework or Apple event anywhere in this server
 — and writes `dist/indexa-capital-mcp.mcpb`.
