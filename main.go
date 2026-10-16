@@ -240,14 +240,10 @@ func toolsCall(params json.RawMessage) (any, *rpcError) {
 	started := time.Now()
 	name, failure := "", ""
 	defer func() {
-		event := fmt.Sprintf("tool=%s outcome=ok ms=%d", toolNameForLog(name), time.Since(started).Milliseconds())
-		level := "info"
 		if failure != "" {
-			level = "error"
-			event = fmt.Sprintf("tool=%s outcome=failed error=%s ms=%d",
-				toolNameForLog(name), failure, time.Since(started).Milliseconds())
+			logLine("error", fmt.Sprintf("tool=%s failed error=%s ms=%d",
+				toolNameForLog(name), failure, time.Since(started).Milliseconds()))
 		}
-		logLine(level, event)
 	}()
 	var p struct {
 		Name string `json:"name"`
@@ -328,7 +324,6 @@ func main() {
 			reply(out, req.ID, nil, &rpcError{-32601, "unsupported method: " + req.Method})
 		}
 	}
-	logLine("info", "stopped")
 	// Scan() also returns false on error — an oversized line, a failed read. Exiting
 	// 0 there is indistinguishable from a clean shutdown, which is how the server
 	// disappears mid-session with nothing to diagnose. Scanner faults carry no
