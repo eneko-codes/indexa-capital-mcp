@@ -130,7 +130,7 @@ go test main.go main_test.go -live    # also makes real read-only calls
 - **No inbound network**: pure stdio transport; the process listens on no port.
 - **No secrets on disk or in logs**: the token lives only in the Keychain; errors return
   the HTTP status code and path, never headers.
-- **Auditable**: ~290 lines, one file, zero dependencies. Read it in full before
+- **Auditable**: one file, zero dependencies. Read it in full before
   building — that's the whole point.
 
 ## An honest limitation

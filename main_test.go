@@ -411,3 +411,28 @@ func toolNames(t *testing.T, listing any) []string {
 	}
 	return names
 }
+
+func TestToolNameForLog(t *testing.T) {
+	for raw, want := range map[string]string{
+		"indexa_capital_account": "indexa_capital_account",
+		"evil\nfatal forged":     "invalid",
+		"":                       "invalid",
+		strings.Repeat("a", 65):  "invalid",
+	} {
+		if got := toolNameForLog(raw); got != want {
+			t.Errorf("toolNameForLog(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestFormatLogLineNamesTheProcess(t *testing.T) {
+	at := time.Date(2026, 10, 17, 1, 2, 3, 0, time.UTC)
+	first := formatLogLine(at, "info", "stopped", 4242)
+	second := formatLogLine(at, "info", "stopped", 4243)
+	if first != "2026-10-17T01:02:03Z info indexa-capital-mcp[4242] stopped\n" {
+		t.Errorf("unexpected line %q", first)
+	}
+	if first == second {
+		t.Error("two processes produced identical lines")
+	}
+}
