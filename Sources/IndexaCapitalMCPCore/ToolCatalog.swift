@@ -5,8 +5,10 @@ import Foundation
 /// Claude Desktop.
 ///
 /// Each entry is a closed path template on `IndexaCapitalAPI.baseURL`, always fetched with
-/// GET. The only thing a caller supplies is an account code, and it is validated before it
-/// is put into the path. Nothing else is reachable.
+/// GET. The only thing a caller supplies that reaches the API is an account code, and it is
+/// validated before it is put into the path. Nothing else is reachable. The other arguments
+/// of `indexa_capital_performance` choose which parts of the answer are returned and are
+/// never sent anywhere.
 public enum ToolCatalog {
 
     public static let userName = "indexa_capital_user"
@@ -22,6 +24,17 @@ public enum ToolCatalog {
         case performance
 
         var needsAccount: Bool { self != .user }
+
+        /// The arguments the schema lists; any other is refused.
+        var argumentNames: [String] {
+            switch self {
+            case .user: []
+            case .account, .portfolio: ["account"]
+            case .performance:
+                ["account", PerformanceResponse.fromArgument, PerformanceResponse.toArgument,
+                 PerformanceResponse.projectionArgument]
+            }
+        }
 
         /// `account` must already have passed `AccountCode.normalise`.
         func path(account: String) -> String {
@@ -63,8 +76,35 @@ public enum ToolCatalog {
             "account": [
                 "type": "string",
                 "description":
-                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
             ]
+        ],
+        "required": ["account"],
+    ]
+
+    private static let performanceArguments: Value = [
+        "type": "object",
+        "properties": [
+            "account": [
+                "type": "string",
+                "description":
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
+            ],
+            PerformanceResponse.fromArgument: [
+                "type": "string",
+                "description":
+                    "First day of daily data to include, as YYYY-MM-DD. Without from_date and to_date, no daily data is returned. With to_date alone, the range starts at the first day there is",
+            ],
+            PerformanceResponse.toArgument: [
+                "type": "string",
+                "description":
+                    "Last day of daily data to include, as YYYY-MM-DD. With from_date alone, the range ends at the last day there is. A range may hold at most \(PerformanceResponse.maximumDays) days",
+            ],
+            PerformanceResponse.projectionArgument: [
+                "type": "boolean",
+                "description":
+                    "Include the monthly projection of expected, best and worst outcomes. Left out by default",
+            ],
         ],
         "required": ["account"],
     ]
@@ -81,26 +121,41 @@ public enum ToolCatalog {
     static let user = Tool(
         name: userName,
         title: "Indexa Capital user and accounts",
-        description: "Authenticated user's data and the list of their accounts (codes)",
+        description: userDescription,
         inputSchema: noArguments, annotations: readOnly)
 
     static let account = Tool(
         name: accountName,
         title: "Indexa Capital account details",
-        description: "Basic information for an account (status, risk profile)",
+        description: accountDescription,
         inputSchema: accountArgument, annotations: readOnly)
 
     static let portfolio = Tool(
         name: portfolioName,
         title: "Indexa Capital portfolio",
-        description: "Current portfolio: positions and valuation",
+        description: portfolioDescription,
         inputSchema: accountArgument, annotations: readOnly)
 
     static let performance = Tool(
         name: performanceName,
         title: "Indexa Capital performance",
-        description: "Account performance and evolution",
-        inputSchema: accountArgument, annotations: readOnly)
+        description: performanceDescription,
+        inputSchema: performanceArguments, annotations: readOnly)
+
+    /// The API's own JSON, unmodified. It takes no parameter that selects less, so a
+    /// response longer than a result may be is refused with its size, never cut.
+    private static let passthroughSuffix =
+        "Returns the API's JSON unmodified; a response longer than \(ToolStandard.longestResult) characters is refused with its size"
+
+    static let userDescription =
+        "Authenticated user's data and the list of their accounts (codes). \(passthroughSuffix)"
+    static let accountDescription =
+        "Basic information for an account (status, risk profile). \(passthroughSuffix)"
+    static let portfolioDescription =
+        "Current portfolio: positions and valuation. \(passthroughSuffix)"
+
+    static let performanceDescription =
+        "Account performance: returns, volatility and monthly history, with no daily data and no projection by default; the first text block says what was left out. Daily data (valuation, cash flows and return index per day) only for the days from_date and to_date select, at most \(PerformanceResponse.maximumDays) per call; the projection only when projection is true. A result longer than \(ToolStandard.longestResult) characters is refused with its size"
 }
 
 /// An Indexa Capital account code: 6 to 10 characters from A–Z and 0–9.

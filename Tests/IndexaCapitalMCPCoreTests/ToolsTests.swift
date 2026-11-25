@@ -7,6 +7,9 @@ import Testing
 @Suite("Tools")
 struct ToolsTests {
 
+    private static let invalidAccount =
+        "invalid account code: expected 6 to 10 characters from A-Z and 0-9; the codes come from indexa_capital_user"
+
     private func call(
         _ name: String, _ arguments: [String: Value]? = nil, token: FakeTokenSource = FakeTokenSource(),
         transport: FakeTransport = FakeTransport(body: #"{"invented":true}"#)
@@ -52,14 +55,36 @@ struct ToolsTests {
         #expect(transport.requests.first?.request.url?.path == "/accounts/ABCD1234")
     }
 
-    /// Models add fields outside the schema unprompted.
-    @Test("Arguments outside the schema are ignored")
+    @Test("An argument outside the schema is refused with the ones allowed, before any request")
     func extraArguments() async {
+        let token = FakeTokenSource()
         let transport = FakeTransport(body: "{}")
-        let output = await call(ToolCatalog.accountName, ["account": "ABCD1234", "limit": 5], transport: transport)
-        #expect(!output.isError)
-        #expect(transport.requests.first?.request.url?.path == "/accounts/ABCD1234")
-        #expect(transport.requests.first?.request.url?.query == nil)
+        let output = await call(
+            ToolCatalog.accountName, ["account": "ABCD1234", "limit": 5], token: token, transport: transport)
+        #expect(
+            output
+                == ToolOutput(
+                    text: "Not an argument of this tool: 'limit'. This tool takes: account.", isError: true))
+        #expect(token.reads == 0)
+        #expect(transport.requests.isEmpty)
+
+        let none = await call(ToolCatalog.userName, ["account": "ABCD1234"], token: token, transport: transport)
+        #expect(
+            none
+                == ToolOutput(
+                    text: "Not an argument of this tool: 'account'. This tool takes no arguments.", isError: true))
+    }
+
+    @Test("A long list of unknown arguments names three and counts the rest, each clipped")
+    func manyUnknownArguments() async {
+        let long = String(repeating: "n", count: 200)
+        let output = await call(
+            ToolCatalog.userName, ["a": 1, "b": 1, "c": 1, "d": 1, "e": 1, long: 1])
+        #expect(output.isError)
+        #expect(output.text.contains("'a', 'b', 'c' and 3 more."))
+        #expect(output.text.utf16.count < 200)
+        let clipped = await call(ToolCatalog.userName, [long: 1])
+        #expect(clipped.text.contains("'" + String(repeating: "n", count: ToolStandard.echoWidth) + "…'"))
     }
 
     /// Each of these is refused before the token is read or a request is made.
@@ -74,14 +99,20 @@ struct ToolsTests {
         let token = FakeTokenSource()
         let transport = FakeTransport(body: "{}")
         let output = await call(ToolCatalog.accountName, arguments, token: token, transport: transport)
-        #expect(output == ToolOutput(text: "invalid account code", isError: true))
+        #expect(output == ToolOutput(text: Self.invalidAccount, isError: true))
         #expect(token.reads == 0)
         #expect(transport.requests.isEmpty)
     }
 
     @Test("No arguments at all is a missing code")
     func noArguments() async {
-        #expect(await call(ToolCatalog.portfolioName, nil) == ToolOutput(text: "invalid account code", isError: true))
+        #expect(await call(ToolCatalog.portfolioName, nil) == ToolOutput(text: Self.invalidAccount, isError: true))
+    }
+
+    @Test("An unknown tool name is repeated only in part")
+    func longUnknownTool() async {
+        let output = await call(String(repeating: "t", count: 500), [:])
+        #expect(output.text == "unknown tool: " + String(repeating: "t", count: ToolStandard.echoWidth) + "…")
     }
 
     @Test("An unknown tool is refused without touching the Keychain or the network")
@@ -149,7 +180,9 @@ struct ToolsTests {
     func sizeLimit() async {
         let limit = 1 << 20
         let atLimit = FakeTransport(HTTPResponse(status: 200, body: .success(Data(repeating: 0x20, count: limit))))
-        #expect(await call(ToolCatalog.userName, [:], transport: atLimit).isError == false)
+        // Past the cap on bytes is a different refusal from past the longest result.
+        #expect(
+            await call(ToolCatalog.userName, [:], transport: atLimit).text.contains("holds \(limit) characters"))
 
         let over = FakeTransport(HTTPResponse(status: 200, body: .success(Data(repeating: 0x20, count: limit + 1))))
         #expect(
