@@ -1,4 +1,7 @@
-indexa-capital-mcp
-.env
+.DS_Store
+.build/
+.swiftpm/
+Package.resolved
 dist/
 extension/server/
+.env

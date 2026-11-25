@@ -9,40 +9,86 @@ NAME="indexa-capital-mcp"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Apple silicon only. Go builds for one target per invocation, so no lipo step.
-# The module-less build (no go.mod) needs the source file named explicitly, same as
-# `go build main.go` in the README.
+# The installer keys on the manifest version alone. A new build under an unchanged version
+# makes it conclude the extension is already installed, and its only offer is "Uninstall".
+# Fail here, before building, if the three places that carry the version disagree.
+MANIFEST_VERSION="$(python3 -c "import json; print(json.load(open('extension/manifest.json'))['version'])")"
+PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+CODE_VERSION="$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/IndexaCapitalMCPCore/Server.swift)"
+if [ "$MANIFEST_VERSION" != "$PLIST_VERSION" ] || [ "$MANIFEST_VERSION" != "$CODE_VERSION" ]; then
+  echo "!! version mismatch: manifest=$MANIFEST_VERSION plist=$PLIST_VERSION server=$CODE_VERSION" >&2
+  exit 1
+fi
+echo "==> Version $MANIFEST_VERSION"
+
+# Apple silicon only. A universal build (--arch arm64 --arch x86_64) doubles the bundle
+# and takes ~70x longer to link, and macOS 26 is the end of the road for Intel anyway.
 echo "==> Building $NAME (arm64)"
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-GOOS=darwin GOARCH=arm64 go build -o "$WORK/$NAME" main.go
+swift build -c release
+
+BINARY=".build/release/$NAME"
+[ -f "$BINARY" ] || { echo "!! no release binary found" >&2; exit 1; }
+
 # GUARD: Apple silicon only. A stray extra architecture would otherwise ship without
 # any error.
-ARCHS="$(lipo -archs "$WORK/$NAME")"
+ARCHS="$(lipo -archs "$BINARY")"
 [ "$ARCHS" = "arm64" ] \
   || { echo "!! expected arm64 only, got: $ARCHS" >&2; exit 1; }
+
+# The embedded Info.plist gives the binary its bundle identifier, which the signature's
+# designated requirement quotes. This server reads no TCC-protected location, so there
+# are no usage descriptions to look for.
+echo "==> Checking the embedded Info.plist survived linking"
+otool -P "$BINARY" | grep -q "codes.eneko.$NAME" \
+  || { echo "!! Info.plist missing from $BINARY" >&2; exit 1; }
 
 echo "==> Staging bundle"
 STAGE="$ROOT/extension"
 rm -rf "$STAGE/server"
 mkdir -p "$STAGE/server"
-cp "$WORK/$NAME" "$STAGE/server/$NAME"
+cp "$BINARY" "$STAGE/server/$NAME"
 chmod +x "$STAGE/server/$NAME"
 
-# There is no TCC identity to establish here and no embedded Info.plist: this server
-# reads one Keychain item by service and account name — no framework, no permission
-# dialog — and sends no Apple event to anything. The signature below is about
-# Gatekeeper, not permissions: an unsigned binary is killed outright on Apple
-# Silicon, so even an ad-hoc signature is required just to run at all.
-# MCPB_SIGN_IDENTITY is only needed for something meant to be handed to another
-# machine.
+# Re-sign. The signature `swift build` leaves is flagged `linker-signed`, which macOS
+# treats as signed by nobody: it carries no designated requirement. A real identity gives
+# the binary a stable identity across rebuilds; ad-hoc (the default here) gives a new
+# cdhash every time. Set MCPB_SIGN_IDENTITY to a signing identity's hash to avoid that.
+#
+# The identity does not affect the Keychain: the token is read by /usr/bin/security,
+# which is on the item's access list, not by this binary. Even ad-hoc, a signature is
+# required just to run at all on Apple silicon.
 IDENTITY="${MCPB_SIGN_IDENTITY:--}"
 echo "==> Signing with identity: $IDENTITY"
-codesign --force --identifier "codes.eneko.$NAME" --sign "$IDENTITY" "$STAGE/server/$NAME"
-codesign -dv "$STAGE/server/$NAME" 2>&1 | grep -oE 'flags=[^ ]*' | sed 's/^/    /' || true
+
+# The identifier is pinned rather than inferred, because the designated requirement
+# quotes it and an inferred one would depend on how the binary was built. Keep it in step
+# with CFBundleIdentifier in Resources/Info.plist.
+SIGN_ARGS=(--force --identifier "codes.eneko.$NAME" --sign "$IDENTITY")
+
+# Hardened runtime is off by default: it is required for notarisation only. Opt in with
+# MCPB_HARDENED=1 when preparing something to distribute. This server sends no Apple
+# events and needs no entitlements file.
+if [ "${MCPB_HARDENED:-0}" = "1" ]; then
+  SIGN_ARGS+=(--options runtime --timestamp)
+fi
+
+codesign "${SIGN_ARGS[@]}" "$STAGE/server/$NAME"
+FLAGS=$(codesign -dv "$STAGE/server/$NAME" 2>&1 | grep -oE 'flags=[^ ]*' || true)
+case "$FLAGS" in
+  *linker-signed*) echo "!! still linker-signed ($FLAGS)" >&2; exit 1 ;;
+  *) echo "    $FLAGS" ;;
+esac
+
+# Signing rewrites the binary, so re-check the plist rather than trusting the earlier pass.
+otool -P "$STAGE/server/$NAME" | grep -q "codes.eneko.$NAME" \
+  || { echo "!! Info.plist lost during signing" >&2; exit 1; }
 
 python3 -c "import json,sys; json.load(open('$STAGE/manifest.json'))" \
   || { echo "!! manifest.json is not valid JSON" >&2; exit 1; }
+
+echo "==> Designated requirement"
+codesign -d -r- "$STAGE/server/$NAME" 2>&1 | grep "^designated" | sed 's/^/    /' \
+  || echo "    (none — ad-hoc signature; the identity changes on every rebuild)"
 
 echo "==> Packing"
 mkdir -p "$ROOT/dist"
@@ -54,8 +100,7 @@ rm -f "$OUT"
 
 # The MCPB spec does not say whether the installer preserves the executable bit, so
 # verify the archive at least records it. If a future Claude release drops it, the
-# symptom is a server that never starts, and the fix is a chmod +x on the installed
-# copy.
+# symptom is a server that never starts, and the fix is a chmod +x on the installed copy.
 echo "==> Verifying the executable bit survived"
 MODE=$(unzip -Z "$OUT" "server/$NAME" | awk 'NR==1 {print $1}')
 case "$MODE" in
@@ -65,4 +110,5 @@ esac
 
 echo
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
-echo "Install it by opening the file with Claude."
+echo "Install it by opening the file with Claude, then quit Claude Desktop completely and"
+echo "reopen it: installing does not restart a server process that is already running."
