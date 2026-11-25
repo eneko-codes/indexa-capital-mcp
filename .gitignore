@@ -1,4 +1,9 @@
-indexa-capital-mcp
-.env
+.DS_Store
+.build/
+.swiftpm/
+Package.resolved
 dist/
 extension/server/
+.env
+# A binary the earlier Go build wrote at the repository root.
+/indexa-capital-mcp
