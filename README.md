@@ -29,13 +29,18 @@ Not affiliated with, endorsed by, or connected to Indexa Capital.
 Start with `indexa_capital_user`: the other tools take an account code it returns.
 Responses are the API's own JSON, passed through unmodified.
 
+The endpoints are described in Indexa Capital's
+[API reference](https://indexacapital.com/en/api-rest-v1). It documents JSON as the only
+response format and no pagination, and none of these four endpoints takes a query
+parameter, so each call returns everything the API has for it.
+
 ## Frameworks and APIs
 
 No third-party package: the server is Foundation and the tools macOS ships.
 
 | Used | For | Reference |
 |---|---|---|
-| Indexa Capital REST API, base URL `https://api.indexacapital.com` | Every tool, with `GET` only | The endpoints in the table above |
+| Indexa Capital REST API, base URL `https://api.indexacapital.com` | Every tool, with `GET` only | [API reference](https://indexacapital.com/en/api-rest-v1) |
 | `security find-generic-password` | Reading the token from the macOS Keychain | [Keychain Services](https://developer.apple.com/documentation/security/keychain-services) |
 | Foundation [`URLSession`](https://developer.apple.com/documentation/foundation/urlsession) (ephemeral, redirects refused) | The HTTPS requests | |
 | Foundation [`Process`](https://developer.apple.com/documentation/foundation/process) | Running `security` | |
