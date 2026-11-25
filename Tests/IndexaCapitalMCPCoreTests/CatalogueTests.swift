@@ -29,6 +29,33 @@ struct CatalogueTests {
         "required": ["account"],
     ]
 
+    private static let performanceSchema: Value = [
+        "type": "object",
+        "properties": [
+            "account": [
+                "type": "string",
+                "description":
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+            ],
+            "from": [
+                "type": "string",
+                "description":
+                    "First day of daily data to include, as YYYY-MM-DD. Without from and to, no daily data is returned. With to alone, the range starts at the first day there is",
+            ],
+            "to": [
+                "type": "string",
+                "description":
+                    "Last day of daily data to include, as YYYY-MM-DD. With from alone, the range ends at the last day there is. A range may hold at most 31 days",
+            ],
+            "projection": [
+                "type": "boolean",
+                "description":
+                    "Include the monthly projection of expected, best and worst outcomes. Left out by default",
+            ],
+        ],
+        "required": ["account"],
+    ]
+
     private static let annotations: Value = [
         "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true,
     ]
@@ -48,8 +75,9 @@ struct CatalogueTests {
                 ],
                 [
                     "name": "indexa_capital_performance", "title": "Indexa Capital performance",
-                    "description": "Account performance and evolution",
-                    "inputSchema": Self.accountSchema, "annotations": Self.annotations,
+                    "description":
+                        "Account performance: returns, volatility and monthly history. Daily data (valuation, cash flows and return index per day) only for the days from and to select, at most 31 per call; the projection only when projection is true",
+                    "inputSchema": Self.performanceSchema, "annotations": Self.annotations,
                 ],
                 [
                     "name": "indexa_capital_portfolio", "title": "Indexa Capital portfolio",
@@ -75,6 +103,7 @@ struct CatalogueTests {
         let instructions = try #require(answer["instructions"]?.stringValue).lowercased()
         #expect(instructions.contains("indexa_capital_user"))
         #expect(instructions.contains("read-only"))
+        #expect(instructions.contains("indexa_capital_performance"))
     }
 
     /// A tool listed in the catalogue with no route answers every call as unknown.

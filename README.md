@@ -24,15 +24,35 @@ Not affiliated with, endorsed by, or connected to Indexa Capital.
 | `indexa_capital_user` | read | `GET /users/me` | The user and the code of each account |
 | `indexa_capital_account` | read | `GET /accounts/{code}` | Account status and profile |
 | `indexa_capital_portfolio` | read | `GET /accounts/{code}/portfolio` | Positions and valuation |
-| `indexa_capital_performance` | read | `GET /accounts/{code}/performance` | Performance and evolution |
+| `indexa_capital_performance` | read | `GET /accounts/{code}/performance` | Returns, volatility and monthly history; daily data and the projection on request |
 
 Start with `indexa_capital_user`: the other tools take an account code it returns.
-Responses are the API's own JSON, passed through unmodified.
+Responses are the API's own JSON, passed through unmodified, except for
+`indexa_capital_performance` (below).
 
 The endpoints are described in Indexa Capital's
 [API reference](https://indexacapital.com/en/api-rest-v1). It documents JSON as the only
 response format and no pagination, and none of these four endpoints takes a query
-parameter, so each call returns everything the API has for it.
+parameter, so the API always answers with everything it has.
+
+### Performance comes back in parts
+
+The performance endpoint answers with a row for every day since the account was opened,
+plus a monthly projection, so its response grows by roughly 100,000 characters a year.
+Claude Code moves a tool result over 50,000 characters out of the conversation and into a
+file. Since the API cannot be asked for less, the server returns less:
+
+| Argument | Effect |
+|---|---|
+| none | The summary: returns, volatility, monthly history |
+| `from`, `to` (`YYYY-MM-DD`) | Adds the daily data for those days, at most 31 per call. One bound alone runs to the other end of the data |
+| `projection` (`true`) | Adds the projection of expected, best and worst outcomes |
+
+The answer is two text blocks. The first says how many days of daily data exist, which
+were included, and which arguments return the rest. The second is the JSON. Members and
+rows are left out whole and nothing is computed or summarised, but the JSON is written
+out again: keys come back sorted and numbers in their shortest form (`10000.0` as
+`10000`). A range holding more than 31 days is refused with the dates that exist.
 
 ## Frameworks and APIs
 
@@ -54,7 +74,9 @@ the same way never shows an access prompt, however the server binary is signed.
 
 - **Closed whitelist.** Four fixed paths, a hard-coded `GET` method, and no passthrough of
   paths or free-form parameters. An account code must be 6 to 10 characters from `A-Z0-9`
-  (lowercase is accepted and uppercased) before it is put into a path.
+  (lowercase is accepted and uppercased) before it is put into a path. The dates and the
+  `projection` switch of the performance tool are checked and used on this Mac only: they
+  choose what is returned and are never sent to the API.
 - **Declared read-only.** Every tool ships `readOnlyHint`/`destructiveHint` annotations, so
   the client can act on the guarantee instead of reading it in prose.
 - **No inbound network.** Pure stdio transport; the process listens on no port.
@@ -161,8 +183,12 @@ display name collide.
   security depends on the token existing only in the Keychain and on nothing but this
   server using it. If you ever get suspicious, regenerate the token.
 - **Responses are capped at 1 MiB, and redirects are refused.**
-- **Checked against the live API on 2026-08-05**, by the earlier Go build that this Swift
-  server reproduces. The API is Indexa Capital's and can change.
+- **A day counts as daily data by its shape**: a row of `portfolios` with a `date`, or an
+  object whose every key is a day written `YYYYMMDD`. If the API starts sending daily
+  data in another shape, that part is passed through whole until the server learns it.
+- **Checked against the live API on 2026-11-25**, as version 1.1.0. The selection of
+  performance data added in 1.2.0 has run against invented responses only. The API is
+  Indexa Capital's and can change.
 
 ## Development
 

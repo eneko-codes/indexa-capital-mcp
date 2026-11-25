@@ -14,14 +14,14 @@ public struct IndexaCapitalTools: ToolHandler {
     public func handle(_ call: ToolCall) async -> ToolOutput {
         let started = ContinuousClock.now
         do throws(ToolError) {
-            return ToolOutput(text: try await run(call), isError: false)
+            return try await run(call)
         } catch {
             Diagnostics.toolFailed(call.name, error: error, since: started)
             return error.output
         }
     }
 
-    private func run(_ call: ToolCall) async throws(ToolError) -> String {
+    private func run(_ call: ToolCall) async throws(ToolError) -> ToolOutput {
         guard let endpoint = ToolCatalog.endpoint(named: call.name) else {
             throw .unknownTool(call.name)
         }
@@ -35,6 +35,12 @@ public struct IndexaCapitalTools: ToolHandler {
             }
             account = code
         }
-        return try await api.get(endpoint.path(account: account))
+        var selection: PerformanceSelection?
+        if endpoint == .performance { selection = try PerformanceSelection(arguments: call.arguments) }
+
+        let path = endpoint.path(account: account)
+        let body = try await api.get(path)
+        guard let selection else { return ToolOutput(text: body, isError: false) }
+        return try PerformanceResponse.select(body, selection, path: path)
     }
 }

@@ -5,8 +5,10 @@ import Foundation
 /// Claude Desktop.
 ///
 /// Each entry is a closed path template on `IndexaCapitalAPI.baseURL`, always fetched with
-/// GET. The only thing a caller supplies is an account code, and it is validated before it
-/// is put into the path. Nothing else is reachable.
+/// GET. The only thing a caller supplies that reaches the API is an account code, and it is
+/// validated before it is put into the path. Nothing else is reachable. The other arguments
+/// of `indexa_capital_performance` choose which parts of the answer are returned and are
+/// never sent anywhere.
 public enum ToolCatalog {
 
     public static let userName = "indexa_capital_user"
@@ -69,6 +71,33 @@ public enum ToolCatalog {
         "required": ["account"],
     ]
 
+    private static let performanceArguments: Value = [
+        "type": "object",
+        "properties": [
+            "account": [
+                "type": "string",
+                "description":
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+            ],
+            "from": [
+                "type": "string",
+                "description":
+                    "First day of daily data to include, as YYYY-MM-DD. Without from and to, no daily data is returned. With to alone, the range starts at the first day there is",
+            ],
+            "to": [
+                "type": "string",
+                "description":
+                    "Last day of daily data to include, as YYYY-MM-DD. With from alone, the range ends at the last day there is. A range may hold at most \(PerformanceResponse.maximumDays) days",
+            ],
+            "projection": [
+                "type": "boolean",
+                "description":
+                    "Include the monthly projection of expected, best and worst outcomes. Left out by default",
+            ],
+        ],
+        "required": ["account"],
+    ]
+
     /// One shared value rather than one per tool: every tool is a fixed GET, so these
     /// describe the server, not any one entry. Clients treat a tool with no annotations as
     /// write-capable, destructive and non-idempotent, the opposite of what this server is.
@@ -99,8 +128,11 @@ public enum ToolCatalog {
     static let performance = Tool(
         name: performanceName,
         title: "Indexa Capital performance",
-        description: "Account performance and evolution",
-        inputSchema: accountArgument, annotations: readOnly)
+        description: performanceDescription,
+        inputSchema: performanceArguments, annotations: readOnly)
+
+    static let performanceDescription =
+        "Account performance: returns, volatility and monthly history. Daily data (valuation, cash flows and return index per day) only for the days from and to select, at most \(PerformanceResponse.maximumDays) per call; the projection only when projection is true"
 }
 
 /// An Indexa Capital account code: 6 to 10 characters from A–Z and 0–9.

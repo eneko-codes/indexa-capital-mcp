@@ -22,6 +22,10 @@ A local MCP server (Swift 6, stdio transport) exposing four read-only tools over
 
 Four fixed paths on `https://api.indexacapital.com`, always `GET`, with the token in `X-AUTH-TOKEN`: `/users/me`, `/accounts/{code}`, `/accounts/{code}/portfolio`, `/accounts/{code}/performance`. `ToolCatalog.Endpoint` is the only place a path is built. Account codes must be 6 to 10 ASCII characters from `A-Z0-9` after trimming and uppercasing (`AccountCode.normalise`) before they go into a path. Redirects are refused (`RefuseRedirects`), a call times out after 20 s, and a response body is capped at 1 MiB.
 
+Reference: [Indexa Capital API v1](https://indexacapital.com/en/api-rest-v1). It documents no pagination, JSON as the only response format, and no query parameter on any of the four endpoints, so less data can only be returned by leaving it out here. The live API returns members the reference does not list.
+
+`/accounts/{code}/performance` holds a row for every day since the account was opened, so it is the one response that is not passed through. `PerformanceResponse` returns the summary, adds daily data only for the days `from` and `to` select (at most `maximumDays` per call, refused beyond that) and the `performance` projection only when `projection` is true, and puts a note in a first text block saying what was left out. Those arguments are read by `PerformanceSelection`, checked before any request, and never put into a request. Daily data is found by shape (a `portfolios` row with a `date`; an object whose keys are all `YYYYMMDD`), not by name. Decoding and re-encoding sorts the keys and shortens the numbers; it must never compute or summarise.
+
 The token is read on every call by running `security find-generic-password -s indexa-capital-api -a "$USER" -w`, with a 10 s limit for a locked Keychain. See [Keychain Services](https://developer.apple.com/documentation/security/keychain-services) for what that store is.
 
 ## Surface not used
@@ -42,7 +46,7 @@ swift test
 
 **Apple silicon only, deliberately.** `scripts/pack.sh` builds for arm64 alone (a plain `swift build -c release`, no `--arch` flags) and fails if the binary holds any other architecture. A universal build doubles the bundle for an architecture macOS 26 is the last release to support. Do not add an x86_64 slice back.
 
-`IndexaCapitalAPI` is the only door to the outside. It takes a `TokenSource` (`KeychainTokenSource` for real) and an `HTTPTransport` (`URLSessionTransport` for real); the tests pass doubles for both. `IndexaCapitalTools` validates the call and builds the path, and `IndexaCapitalAPI.get` does the request, the status check and the size check. Error texts in `ToolError` keep the wording the Go server had.
+`IndexaCapitalAPI` is the only door to the outside. It takes a `TokenSource` (`KeychainTokenSource` for real) and an `HTTPTransport` (`URLSessionTransport` for real); the tests pass doubles for both. `IndexaCapitalTools` validates the call and builds the path, and `IndexaCapitalAPI.get` does the request, the status check and the size check. `PerformanceResponse.select` then cuts the performance body down; the other three bodies go out as they came. Error texts in `ToolError` keep the wording the Go server had.
 
 ## Release checklist
 
