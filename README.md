@@ -98,8 +98,11 @@ in System Settings.
 ### Preparing something to distribute
 
 ```bash
-MCPB_SIGN_IDENTITY="Developer ID Application: …" ./scripts/pack.sh
+MCPB_SIGN_IDENTITY="<Developer ID Application hash>" ./scripts/pack.sh
 ```
+
+Pass the 40-character hash from `security find-identity -v -p codesigning`, not the
+certificate's name: `pack.sh` prints the identity it signs with, and the name is yours.
 
 The default ad-hoc signature is enough to run on this Mac. A real identity is only needed
 for a binary meant to run on someone else's.
