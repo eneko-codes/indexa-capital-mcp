@@ -23,7 +23,7 @@ struct CatalogueTests {
             "account": [
                 "type": "string",
                 "description":
-                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
             ]
         ],
         "required": ["account"],
@@ -35,17 +35,17 @@ struct CatalogueTests {
             "account": [
                 "type": "string",
                 "description":
-                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
             ],
-            "from": [
+            "from_date": [
                 "type": "string",
                 "description":
-                    "First day of daily data to include, as YYYY-MM-DD. Without from and to, no daily data is returned. With to alone, the range starts at the first day there is",
+                    "First day of daily data to include, as YYYY-MM-DD. Without from_date and to_date, no daily data is returned. With to_date alone, the range starts at the first day there is",
             ],
-            "to": [
+            "to_date": [
                 "type": "string",
                 "description":
-                    "Last day of daily data to include, as YYYY-MM-DD. With from alone, the range ends at the last day there is. A range may hold at most 31 days",
+                    "Last day of daily data to include, as YYYY-MM-DD. With from_date alone, the range ends at the last day there is. A range may hold at most 31 days",
             ],
             "projection": [
                 "type": "boolean",
@@ -70,23 +70,22 @@ struct CatalogueTests {
             tools == [
                 [
                     "name": "indexa_capital_account", "title": "Indexa Capital account details",
-                    "description": "Basic information for an account (status, risk profile)",
+                    "description": .string(ToolCatalog.accountDescription),
                     "inputSchema": Self.accountSchema, "annotations": Self.annotations,
                 ],
                 [
                     "name": "indexa_capital_performance", "title": "Indexa Capital performance",
-                    "description":
-                        "Account performance: returns, volatility and monthly history. Daily data (valuation, cash flows and return index per day) only for the days from and to select, at most 31 per call; the projection only when projection is true",
+                    "description": .string(ToolCatalog.performanceDescription),
                     "inputSchema": Self.performanceSchema, "annotations": Self.annotations,
                 ],
                 [
                     "name": "indexa_capital_portfolio", "title": "Indexa Capital portfolio",
-                    "description": "Current portfolio: positions and valuation",
+                    "description": .string(ToolCatalog.portfolioDescription),
                     "inputSchema": Self.accountSchema, "annotations": Self.annotations,
                 ],
                 [
                     "name": "indexa_capital_user", "title": "Indexa Capital user and accounts",
-                    "description": "Authenticated user's data and the list of their accounts (codes)",
+                    "description": .string(ToolCatalog.userDescription),
                     "inputSchema": ["type": "object", "properties": [:], "required": []],
                     "annotations": Self.annotations,
                 ],

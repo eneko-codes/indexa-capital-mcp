@@ -28,7 +28,10 @@ Not affiliated with, endorsed by, or connected to Indexa Capital.
 
 Start with `indexa_capital_user`: the other tools take an account code it returns.
 Responses are the API's own JSON, passed through unmodified, except for
-`indexa_capital_performance` (below).
+`indexa_capital_performance` (below). The API takes no parameter that returns less, so a
+response longer than 40000 characters (the longest result a tool of this server returns)
+is refused with its size and never cut. An argument a tool does not list is refused, with
+the ones it takes.
 
 The endpoints are described in Indexa Capital's
 [API reference](https://indexacapital.com/en/api-rest-v1). It documents JSON as the only
@@ -39,20 +42,23 @@ parameter, so the API always answers with everything it has.
 
 The performance endpoint answers with a row for every day since the account was opened,
 plus a monthly projection, so its response grows by roughly 100,000 characters a year.
-Claude Code moves a tool result over 50,000 characters out of the conversation and into a
-file. Since the API cannot be asked for less, the server returns less:
+Since the API cannot be asked for less, the server returns less:
 
 | Argument | Effect |
 |---|---|
 | none | The summary: returns, volatility, monthly history |
-| `from`, `to` (`YYYY-MM-DD`) | Adds the daily data for those days, at most 31 per call. One bound alone runs to the other end of the data |
+| `from_date`, `to_date` (`YYYY-MM-DD`, both inclusive) | Adds the daily data for those days, at most 31 days per call. One bound alone runs to the other end of the data |
 | `projection` (`true`) | Adds the projection of expected, best and worst outcomes |
 
-The answer is two text blocks. The first says how many days of daily data exist, which
-were included, and which arguments return the rest. The second is the JSON. Members and
-rows are left out whole and nothing is computed or summarised, but the JSON is written
-out again: keys come back sorted and numbers in their shortest form (`10000.0` as
-`10000`). A range holding more than 31 days is refused with the dates that exist.
+The answer is two text blocks. The first says what was left out and the arguments that
+return it, in the same sentences every tool of the owner's servers uses, plus one sentence
+of its own saying which days of daily data exist and which were included. It is left out
+when nothing was left out. The second is the JSON. Members and rows are left out whole and
+nothing is computed or summarised, but the JSON is written out again: keys come back
+sorted and numbers in their shortest form (`10000.0` as `10000`). A range holding more
+than 31 days is refused with the dates that exist, and so is a result longer than 40000
+characters, with the argument that narrows it. The earlier arguments `from` and `to` were
+renamed `from_date` and `to_date`; a call that still uses them is refused.
 
 ## Frameworks and APIs
 
@@ -85,8 +91,8 @@ the same way never shows an access prompt, however the server binary is signed.
   with no cookie, cache or credential store.
 - **Redirects are refused.** URLSession would otherwise replay the token header to whatever
   host a redirect names. A redirect is reported as its HTTP status.
-- **Bounded.** A request times out after 20 seconds, a locked Keychain after 10, and a
-  response larger than 1 MiB is refused rather than cut short.
+- **Bounded.** A request times out after 20 seconds, a locked Keychain after 10, a whole
+  call after 45, and a response larger than 1 MiB is refused rather than cut short.
 
 ## Install
 

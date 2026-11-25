@@ -58,21 +58,12 @@ struct PerformanceSelection: Equatable, Sendable {
 extension PerformanceSelection {
 
     /// Read before any request is made, so a bad date costs neither a Keychain read nor a
-    /// call. A `projection` that is not a boolean counts as not asked for.
-    init(arguments: [String: Value]?) throws(ToolError) {
-        from = try Self.day(arguments, "from")
-        to = try Self.day(arguments, "to")
-        projection = arguments?["projection"]?.boolValue ?? false
+    /// call.
+    init(arguments: Arguments) throws(ToolError) {
+        from = try arguments.day(PerformanceResponse.fromArgument)
+        to = try arguments.day(PerformanceResponse.toArgument)
+        projection = try arguments.bool(PerformanceResponse.projectionArgument, default: false)
         if let from, let to, from > to { throw .invalidRange }
-    }
-
-    /// Models send `null` for an argument they leave out, so it reads as absent.
-    private static func day(_ arguments: [String: Value]?, _ name: String) throws(ToolError) -> Day? {
-        guard let value = arguments?[name], !value.isNull else { return nil }
-        guard let day = value.stringValue.flatMap(Day.init(argument:)) else {
-            throw .invalidDate(argument: name)
-        }
-        return day
     }
 }
 
@@ -93,6 +84,10 @@ enum PerformanceResponse {
     /// characters at which Claude Code moves a result out of the conversation into a file.
     static let maximumDays = 31
 
+    static let fromArgument = "from_date"
+    static let toArgument = "to_date"
+    static let projectionArgument = "projection"
+
     static let projectionKey = "performance"
     static let dailyRowsKey = "portfolios"
 
@@ -104,6 +99,7 @@ enum PerformanceResponse {
         else { throw .unexpectedShape(path: path) }
 
         let hasProjection = fields[projectionKey] != nil
+        let projectionMembers = fields[projectionKey]?.objectValue?.count ?? 1
         if !selection.projection { fields[projectionKey] = nil }
 
         var available: Set<Day> = []
@@ -128,10 +124,24 @@ enum PerformanceResponse {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         guard let data = try? encoder.encode(kept) else { throw .unexpectedShape(path: path) }
-        let note = note(
+        let json = String(decoding: data, as: UTF8.self)
+        let notices = leftOutNotices(
             available: available, returned: returned, selection: selection,
-            projectionLeftOut: hasProjection && !selection.projection)
-        return ToolOutput(content: [.text(note), .text(String(decoding: data, as: UTF8.self))], isError: false)
+            projectionMembers: hasProjection && !selection.projection ? projectionMembers : nil)
+        let note = notices.joined(separator: "\n")
+
+        // The result is bounded here, not by the guard: what is too long is refused with
+        // its size, never cut, and the way to ask for less is named.
+        let characters = note.utf16.count + json.utf16.count
+        if characters > ToolStandard.longestResult {
+            var narrowing: [String] = []
+            if returned.count > 1 { narrowing.append("\(fromArgument) and \(toArgument) (fewer days)") }
+            if selection.projection { narrowing.append("leaving out \(projectionArgument)") }
+            throw .resultTooLong(
+                characters: characters, narrowBy: narrowing.isEmpty ? nil : narrowing.joined(separator: " or "))
+        }
+        return ToolOutput(
+            content: note.isEmpty ? [.text(json)] : [.text(note), .text(json)], isError: false)
     }
 
     /// An object keyed by day is recognised by its keys rather than by its name, so a
@@ -148,36 +158,42 @@ enum PerformanceResponse {
         return .object(fields.mapValues { keepingSelectedDays($0, selection, available: &available) })
     }
 
-    /// Plain words for the model: what the response holds, what this call got of it, and
-    /// the arguments that return the rest.
-    private static func note(
-        available: Set<Day>, returned: Set<Day>, selection: PerformanceSelection, projectionLeftOut: Bool
-    ) -> String {
-        var sentences = ["indexa-capital-mcp returns part of the API's performance response."]
+    /// What this result leaves out, in the fixed wording of `Notice` where one fits, one
+    /// sentence a line. The sentence about which days exist and which are included is the
+    /// server's own: no `Notice` form places a range of days in a whole. A result that holds
+    /// everything and was asked for nothing carries no notice.
+    private static func leftOutNotices(
+        available: Set<Day>, returned: Set<Day>, selection: PerformanceSelection, projectionMembers: Int?
+    ) -> [String] {
+        var notices: [String] = []
         if let first = available.min(), let last = available.max() {
-            let exists =
-                "Daily data exists for \(count(available.count)), \(first.dashed) to \(last.dashed)"
-            if selection.from == nil && selection.to == nil {
-                sentences.append(
-                    "\(exists), and none of it is included: pass from and to (YYYY-MM-DD, at most \(maximumDays) days per call) to include those days."
-                )
-            } else if let firstReturned = returned.min(), let lastReturned = returned.max() {
-                sentences.append(
-                    "\(exists). Included: \(count(returned.count)), \(firstReturned.dashed) to \(lastReturned.dashed)."
-                )
-            } else {
-                sentences.append("\(exists). None of it falls in the range asked for.")
+            let asked = selection.from != nil || selection.to != nil
+            if !asked || returned.count < available.count {
+                let held: String
+                if let firstReturned = returned.min(), let lastReturned = returned.max() {
+                    held = "Included: \(count(returned.count)), \(firstReturned.dashed) to \(lastReturned.dashed)."
+                } else {
+                    held = asked ? "None of it falls in the range asked for." : "None of it is included."
+                }
+                notices.append(
+                    "Daily data exists for \(count(available.count)), \(first.dashed) to \(last.dashed). \(held)")
+                notices.append(
+                    Notice.notShown(
+                        count: available.count - returned.count, things: "days of daily data",
+                        pass:
+                            "\(fromArgument)=YYYY-MM-DD and \(toArgument)=YYYY-MM-DD (at most \(maximumDays) days per call)"
+                    ))
             }
-        } else {
-            sentences.append("The response holds no daily data.")
+        } else if selection.from != nil || selection.to != nil {
+            notices.append("The response holds no daily data.")
         }
-        if projectionLeftOut {
-            sentences.append(
-                "The projection of expected, best and worst outcomes (\"\(projectionKey)\") is left out: pass projection=true to include it."
-            )
+        if let projectionMembers {
+            notices.append(
+                Notice.notShown(
+                    count: projectionMembers, things: "members of the projection (\"\(projectionKey)\")",
+                    pass: "\(projectionArgument)=true"))
         }
-        sentences.append("The JSON that follows is the API's own data.")
-        return sentences.joined(separator: " ")
+        return notices
     }
 
     private static func count(_ days: Int) -> String {

@@ -25,6 +25,17 @@ public enum ToolCatalog {
 
         var needsAccount: Bool { self != .user }
 
+        /// The arguments the schema lists; any other is refused.
+        var argumentNames: [String] {
+            switch self {
+            case .user: []
+            case .account, .portfolio: ["account"]
+            case .performance:
+                ["account", PerformanceResponse.fromArgument, PerformanceResponse.toArgument,
+                 PerformanceResponse.projectionArgument]
+            }
+        }
+
         /// `account` must already have passed `AccountCode.normalise`.
         func path(account: String) -> String {
             switch self {
@@ -65,7 +76,7 @@ public enum ToolCatalog {
             "account": [
                 "type": "string",
                 "description":
-                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
             ]
         ],
         "required": ["account"],
@@ -77,19 +88,19 @@ public enum ToolCatalog {
             "account": [
                 "type": "string",
                 "description":
-                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user",
+                    "Indexa Capital account code (e.g. ABCD1234), obtainable via indexa_capital_user. 6 to 10 characters from A-Z and 0-9",
             ],
-            "from": [
+            PerformanceResponse.fromArgument: [
                 "type": "string",
                 "description":
-                    "First day of daily data to include, as YYYY-MM-DD. Without from and to, no daily data is returned. With to alone, the range starts at the first day there is",
+                    "First day of daily data to include, as YYYY-MM-DD. Without from_date and to_date, no daily data is returned. With to_date alone, the range starts at the first day there is",
             ],
-            "to": [
+            PerformanceResponse.toArgument: [
                 "type": "string",
                 "description":
-                    "Last day of daily data to include, as YYYY-MM-DD. With from alone, the range ends at the last day there is. A range may hold at most \(PerformanceResponse.maximumDays) days",
+                    "Last day of daily data to include, as YYYY-MM-DD. With from_date alone, the range ends at the last day there is. A range may hold at most \(PerformanceResponse.maximumDays) days",
             ],
-            "projection": [
+            PerformanceResponse.projectionArgument: [
                 "type": "boolean",
                 "description":
                     "Include the monthly projection of expected, best and worst outcomes. Left out by default",
@@ -110,19 +121,19 @@ public enum ToolCatalog {
     static let user = Tool(
         name: userName,
         title: "Indexa Capital user and accounts",
-        description: "Authenticated user's data and the list of their accounts (codes)",
+        description: userDescription,
         inputSchema: noArguments, annotations: readOnly)
 
     static let account = Tool(
         name: accountName,
         title: "Indexa Capital account details",
-        description: "Basic information for an account (status, risk profile)",
+        description: accountDescription,
         inputSchema: accountArgument, annotations: readOnly)
 
     static let portfolio = Tool(
         name: portfolioName,
         title: "Indexa Capital portfolio",
-        description: "Current portfolio: positions and valuation",
+        description: portfolioDescription,
         inputSchema: accountArgument, annotations: readOnly)
 
     static let performance = Tool(
@@ -131,8 +142,20 @@ public enum ToolCatalog {
         description: performanceDescription,
         inputSchema: performanceArguments, annotations: readOnly)
 
+    /// The API's own JSON, unmodified. It takes no parameter that selects less, so a
+    /// response longer than a result may be is refused with its size, never cut.
+    private static let passthroughSuffix =
+        "Returns the API's JSON unmodified; a response longer than \(ToolStandard.longestResult) characters is refused with its size"
+
+    static let userDescription =
+        "Authenticated user's data and the list of their accounts (codes). \(passthroughSuffix)"
+    static let accountDescription =
+        "Basic information for an account (status, risk profile). \(passthroughSuffix)"
+    static let portfolioDescription =
+        "Current portfolio: positions and valuation. \(passthroughSuffix)"
+
     static let performanceDescription =
-        "Account performance: returns, volatility and monthly history. Daily data (valuation, cash flows and return index per day) only for the days from and to select, at most \(PerformanceResponse.maximumDays) per call; the projection only when projection is true"
+        "Account performance: returns, volatility and monthly history, with no daily data and no projection by default; the first text block says what was left out. Daily data (valuation, cash flows and return index per day) only for the days from_date and to_date select, at most \(PerformanceResponse.maximumDays) per call; the projection only when projection is true. A result longer than \(ToolStandard.longestResult) characters is refused with its size"
 }
 
 /// An Indexa Capital account code: 6 to 10 characters from A–Z and 0–9.
